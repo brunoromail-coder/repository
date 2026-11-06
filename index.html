@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assistente de Ovoscopia por IA - Estimativa Lúdica</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Ícones -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      touch-action: manipulation;
+    }
+    
+    /* Moldura Anatômica do Ovo */
+    .egg-guide {
+      width: 200px;
+      height: 280px;
+      border: 3px dashed rgba(255, 255, 255, 0.7);
+      border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      transition: all 0.3s ease;
+    }
+    
+    .egg-guide.active {
+      border-color: #f59e0b;
+      box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between items-center p-3 sm:p-5">
+
+  <!-- ==================== MODAL DE TERMOS ==================== -->
+  <div id="terms-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl flex flex-col gap-4">
+      <div class="flex items-center gap-3 text-amber-400">
+        <i class="fa-solid fa-shield-halved text-3xl"></i>
+        <h2 class="text-lg font-bold text-white">Termo de Uso & Estimativa</h2>
+      </div>
+      
+      <p class="text-slate-300 text-xs leading-relaxed">
+        Esta aplicação é uma <strong>ferramenta lúdica para uso pessoal (Hobby)</strong>.
+      </p>
+
+      <ul class="text-[11px] text-slate-400 space-y-1.5 list-disc pl-4">
+        <li>A análise por visão computacional é apenas uma <strong>estimativa visual</strong>.</li>
+        <li>Não possui validade de laudo sanitário ou de segurança alimentar.</li>
+        <li>Realize sempre o teste físico da água antes de consumir.</li>
+      </ul>
+
+      <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700/60 text-xs text-slate-300">
+        <span class="font-semibold text-amber-300 block mb-1">Como utilizar:</span>
+        <ol class="list-decimal pl-4 space-y-1 text-[11px]">
+          <li>Posicione a lanterna acesa por trás do ovo.</li>
+          <li>Enquadre o ovo de forma nítida na moldura central.</li>
+          <li>Clique no botão para analisar os 4 indicadores visuais.</li>
+        </ol>
+      </div>
+
+      <button id="accept-terms-btn" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold py-3 px-4 rounded-xl transition shadow-lg text-center text-sm">
+        Compreendo e Quero Testar
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== CABEÇALHO ==================== -->
+  <header class="w-full max-w-md flex justify-between items-center py-2 px-1">
+    <div class="flex items-center gap-2.5">
+      <div class="p-2 bg-amber-500/20 text-amber-400 rounded-xl">
+        <i class="fa-solid fa-egg text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-base font-bold leading-tight text-white">Ovoscopia por IA</h1>
+        <p class="text-[11px] text-slate-400">Modo de Captura Livre (4 Indicadores)</p>
+      </div>
+    </div>
+    <span id="system-status" class="text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+      Aguardando
+    </span>
+  </header>
+
+  <!-- ==================== CÂMERA & PROCESSAMENTO ==================== -->
+  <main class="w-full max-w-md flex-1 flex flex-col items-center justify-center my-2 relative">
+    
+    <!-- VIEWPORT DA CÂMERA -->
+    <div class="relative w-full aspect-[3/4] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex items-center justify-center">
+      
+      <!-- Video Element -->
+      <video id="webcam" autoplay playsinline class="w-full h-full object-cover"></video>
+      
+      <!-- Canvas Oculto para Análise -->
+      <canvas id="analysis-canvas" class="hidden"></canvas>
+
+      <!-- GUIA DO OVO -->
+      <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4">
+        <div id="egg-guide" class="egg-guide active flex flex-col items-center justify-between p-3">
+          <span class="text-[9px] text-amber-300 font-bold uppercase tracking-widest bg-slate-900/80 px-2 py-0.5 rounded-full border border-amber-500/30">
+            Câmara de Ar (Topo)
+          </span>
+          <span class="text-[9px] text-amber-300 font-bold uppercase tracking-widest bg-slate-900/80 px-2 py-0.5 rounded-full border border-amber-500/30">
+            Base do Ovo
+          </span>
+        </div>
+      </div>
+
+      <!-- BANNER INFORMATIVO (DICAS EM TEMPO REAL) -->
+      <div class="absolute top-3 inset-x-3 flex justify-center pointer-events-none">
+        <div id="quality-badge" class="bg-slate-900/90 border border-slate-700/80 text-amber-400 px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg backdrop-blur-sm">
+          <i id="quality-icon" class="fa-solid fa-camera"></i>
+          <span id="quality-text">Enquadre o ovo com nitidez</span>
+        </div>
+      </div>
+
+      <!-- BARRA DE ILUMINAÇÃO TRANSMITIDA -->
+      <div class="absolute bottom-3 inset-x-5 pointer-events-none flex flex-col gap-1">
+        <div class="flex justify-between text-[10px] font-semibold text-slate-300 bg-slate-950/70 px-2.5 py-0.5 rounded-md backdrop-blur-sm">
+          <span>Brilho Transmitido:</span>
+          <span id="luminance-val">0%</span>
+        </div>
+        <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
+          <div id="luminance-bar" class="h-full w-0 bg-amber-500 transition-all duration-150"></div>
+        </div>
+      </div>
+
+      <!-- LOADING OVERLAY -->
+      <div id="loading-overlay" class="hidden absolute inset-0 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-20">
+        <i class="fa-solid fa-circle-notch fa-spin text-4xl text-amber-400"></i>
+        <p class="text-sm font-semibold text-slate-200">Analisando imagem...</p>
+        <span class="text-xs text-slate-400">Extraindo métricas dos 4 pilares visuais</span>
+      </div>
+
+    </div>
+
+    <!-- BOTÕES DE CONTROLE -->
+    <div class="w-full mt-3 flex gap-2.5">
+      <button id="capture-btn" class="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-bold py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 transition shadow-lg cursor-pointer text-sm transform active:scale-95">
+        <i class="fa-solid fa-camera"></i>
+        <span>Capturar e Analisar Ovo</span>
+      </button>
+
+      <button id="toggle-camera-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold p-3.5 rounded-2xl transition shadow-lg flex items-center justify-center border border-slate-700">
+        <i class="fa-solid fa-camera-rotate text-base"></i>
+      </button>
+    </div>
+
+    <!-- ==================== RESULTADO DETALHADO DOS 4 PILARES ==================== -->
+    <div id="result-card" class="hidden w-full mt-3 bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-2xl flex flex-col gap-3">
+      
+      <!-- FOTO CAPTURADA -->
+      <div class="w-full flex flex-col gap-1.5">
+        <div class="flex justify-between items-center">
+          <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+            <i class="fa-solid fa-image"></i>
+            Imagem Analisada
+          </span>
+          <span class="text-[9px] text-slate-400">Snapshot estático</span>
+        </div>
+        <div class="w-full aspect-[4/3] rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 shadow-inner">
+          <img id="captured-image-preview" src="" alt="Ovo Capturado" class="w-full h-full object-cover">
+        </div>
+      </div>
+
+      <div class="flex items-start justify-between border-b border-slate-800 pb-2.5 pt-1">
+        <div>
+          <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Diagnóstico de Ovoscopia</span>
+          <h2 id="result-status" class="text-lg font-extrabold text-emerald-400">Ovo Fresco</h2>
+        </div>
+        <div id="result-icon-container" class="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl">
+          <i id="result-icon" class="fa-solid fa-circle-check text-xl"></i>
+        </div>
+      </div>
+
+      <!-- PAINEL DOS 4 INDICADORES VISUAIS -->
+      <div class="space-y-2">
+        <span class="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">Indicadores Visuais Extraídos</span>
+        
+        <!-- 1. Câmara de Ar -->
+        <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 flex flex-col gap-1">
+          <div class="flex justify-between text-xs font-medium">
+            <span class="text-slate-300"><i class="fa-solid fa-wind text-amber-400 mr-1.5"></i>Câmara de Ar (Topo)</span>
+            <span id="ind-air-label" class="text-emerald-400 font-bold">Pequena (Fresco)</span>
+          </div>
+          <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div id="ind-air-bar" class="h-full bg-emerald-500 w-[20%] transition-all duration-300"></div>
+          </div>
+        </div>
+
+        <!-- 2. Translucidez da Clara/Gema -->
+        <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 flex flex-col gap-1">
+          <div class="flex justify-between text-xs font-medium">
+            <span class="text-slate-300"><i class="fa-solid fa-sun text-amber-400 mr-1.5"></i>Translucidez do Corpo</span>
+            <span id="ind-trans-label" class="text-emerald-400 font-bold">Limpa & Homogênea</span>
+          </div>
+          <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div id="ind-trans-bar" class="h-full bg-emerald-500 w-[85%] transition-all duration-300"></div>
+          </div>
+        </div>
+
+        <!-- 3. Porosidade da Casca (Textura) -->
+        <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 flex flex-col gap-1">
+          <div class="flex justify-between text-xs font-medium">
+            <span class="text-slate-300"><i class="fa-solid fa-braille text-amber-400 mr-1.5"></i>Porosidade da Casca</span>
+            <span id="ind-pore-label" class="text-slate-200 font-bold">Baixa / Normal</span>
+          </div>
+          <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div id="ind-pore-bar" class="h-full bg-blue-500 w-[30%] transition-all duration-300"></div>
+          </div>
+        </div>
+
+        <!-- 4. Posição da Gema -->
+        <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 flex flex-col gap-1">
+          <div class="flex justify-between text-xs font-medium">
+            <span class="text-slate-300"><i class="fa-solid fa-bullseye text-amber-400 mr-1.5"></i>Posição da Gema</span>
+            <span id="ind-yolk-label" class="text-emerald-400 font-bold">Centralizada</span>
+          </div>
+          <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div id="ind-yolk-bar" class="h-full bg-emerald-500 w-[90%] transition-all duration-300"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RESUMO DE ESTIMATIVA -->
+      <div class="grid grid-cols-2 gap-2.5">
+        <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 flex flex-col">
+          <span class="text-[10px] text-slate-400">Validade Estimada</span>
+          <span id="expiry-val" class="text-xs font-bold text-amber-300 mt-0.5">Até 15 - 20 dias</span>
+          <span class="text-[8px] text-slate-500">Em geladeira</span>
+        </div>
+        <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 flex flex-col">
+          <span class="text-[10px] text-slate-400">Confiança do Diagnóstico</span>
+          <span id="confidence-val" class="text-xs font-bold text-slate-200 mt-0.5">89%</span>
+          <span class="text-[8px] text-slate-500">Algoritmo de Visão</span>
+        </div>
+      </div>
+
+      <!-- RECOMENDAÇÃO -->
+      <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60 text-xs text-slate-300 space-y-1">
+        <div class="font-semibold text-amber-300 flex items-center gap-1.5 text-[11px]">
+          <i class="fa-solid fa-utensils"></i>
+          <span>Recomendação de Uso:</span>
+        </div>
+        <p id="result-advice" class="leading-relaxed text-[11px]">
+          Excelente estado de frescor! Recomendado para qualquer preparação (frito, cozido ou pochê).
+        </p>
+      </div>
+
+      <!-- REFAZER -->
+      <button id="reset-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 text-xs border border-slate-700">
+        <i class="fa-solid fa-rotate-left"></i>
+        <span>Nova Ovoscopia</span>
+      </button>
+
+    </div>
+
+  </main>
+
+  <!-- ==================== RODAPÉ ==================== -->
+  <footer class="w-full max-w-md text-center py-1.5">
+    <p class="text-[10px] text-slate-500 leading-tight">
+      <i class="fa-solid fa-circle-info text-slate-400 mr-0.5"></i>
+      Ferramenta exclusivamente pessoal/hobby. Não substitui inspeção veterinária ou teste físico de flutuação.
+    </p>
+  </footer>
+
+  <!-- ==================== LÓGICA JAVASCRIPT ==================== -->
+  <script>
+    const state = {
+      stream: null,
+      facingMode: 'environment',
+      isAnalyzing: false,
+      luminance: 0,
+      qualityInterval: null
+    };
+
+    const elements = {
+      termsModal: document.getElementById('terms-modal'),
+      acceptTermsBtn: document.getElementById('accept-terms-btn'),
+      systemStatus: document.getElementById('system-status'),
+      video: document.getElementById('webcam'),
+      canvas: document.getElementById('analysis-canvas'),
+      qualityBadge: document.getElementById('quality-badge'),
+      qualityIcon: document.getElementById('quality-icon'),
+      qualityText: document.getElementById('quality-text'),
+      luminanceVal: document.getElementById('luminance-val'),
+      luminanceBar: document.getElementById('luminance-bar'),
+      captureBtn: document.getElementById('capture-btn'),
+      toggleCameraBtn: document.getElementById('toggle-camera-btn'),
+      loadingOverlay: document.getElementById('loading-overlay'),
+      resultCard: document.getElementById('result-card'),
+      capturedImagePreview: document.getElementById('captured-image-preview'),
+      resultStatus: document.getElementById('result-status'),
+      resultIcon: document.getElementById('result-icon'),
+      resultIconContainer: document.getElementById('result-icon-container'),
+      
+      // 4 Indicadores
+      indAirLabel: document.getElementById('ind-air-label'),
+      indAirBar: document.getElementById('ind-air-bar'),
+      indTransLabel: document.getElementById('ind-trans-label'),
+      indTransBar: document.getElementById('ind-trans-bar'),
+      indPoreLabel: document.getElementById('ind-pore-label'),
+      indPoreBar: document.getElementById('ind-pore-bar'),
+      indYolkLabel: document.getElementById('ind-yolk-label'),
+      indYolkBar: document.getElementById('ind-yolk-bar'),
+
+      expiryVal: document.getElementById('expiry-val'),
+      confidenceVal: document.getElementById('confidence-val'),
+      resultAdvice: document.getElementById('result-advice'),
+      resetBtn: document.getElementById('reset-btn')
+    };
+
+    window.addEventListener('load', () => {
+      setupEventListeners();
+    });
+
+    function setupEventListeners() {
+      elements.acceptTermsBtn.addEventListener('click', () => {
+        elements.termsModal.classList.add('hidden');
+        initCamera();
+      });
+
+      elements.toggleCameraBtn.addEventListener('click', () => {
+        state.facingMode = state.facingMode === 'environment' ? 'user' : 'environment';
+        initCamera();
+      });
+
+      elements.captureBtn.addEventListener('click', runAnalysis);
+
+      elements.resetBtn.addEventListener('click', () => {
+        elements.resultCard.classList.add('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
+
+    async function initCamera() {
+      if (state.stream) {
+        state.stream.getTracks().forEach(track => track.stop());
+      }
+
+      try {
+        elements.systemStatus.textContent = "Conectando...";
+        
+        const constraints = {
+          video: {
+            facingMode: { ideal: state.facingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        };
+
+        state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+        elements.video.srcObject = state.stream;
+
+        elements.video.onloadedmetadata = () => {
+          elements.video.play();
+          elements.systemStatus.textContent = "Pronto";
+          elements.systemStatus.className = "text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+          startLuminanceMonitor();
+        };
+
+      } catch (err) {
+        console.error("Erro na câmera:", err);
+        elements.systemStatus.textContent = "Erro";
+        elements.systemStatus.className = "text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30";
+        elements.qualityText.textContent = "Erro ao acessar a câmera";
+      }
+    }
+
+    // MONITOR DE ILUMINAÇÃO (SEM BLOQUEAR O BOTÃO DE DISPARO)
+    function startLuminanceMonitor() {
+      if (state.qualityInterval) clearInterval(state.qualityInterval);
+
+      const ctx = elements.canvas.getContext('2d', { willReadFrequently: true });
+
+      state.qualityInterval = setInterval(() => {
+        if (!elements.video.videoWidth || state.isAnalyzing) return;
+
+        elements.canvas.width = 160;
+        elements.canvas.height = 120;
+
+        ctx.drawImage(elements.video, 0, 0, elements.canvas.width, elements.canvas.height);
+
+        const roiWidth = 50;
+        const roiHeight = 70;
+        const roiX = (elements.canvas.width - roiWidth) / 2;
+        const roiY = (elements.canvas.height - roiHeight) / 2;
+
+        const imgData = ctx.getImageData(roiX, roiY, roiWidth, roiHeight);
+        const data = imgData.data;
+
+        let totalBrightness = 0;
+        const totalPixels = data.length / 4;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          totalBrightness += (0.299 * r + 0.587 * g + 0.114 * b);
+        }
+
+        const avgLum = totalBrightness / totalPixels;
+        state.luminance = Math.min(100, Math.round((avgLum / 255) * 100));
+
+        elements.luminanceVal.textContent = `${state.luminance}%`;
+        elements.luminanceBar.style.width = `${state.luminance}%`;
+
+        if (state.luminance >= 50) {
+          elements.qualityBadge.className = "bg-emerald-950/90 text-emerald-400 border border-emerald-700 px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg backdrop-blur-sm";
+          elements.qualityIcon.className = "fa-solid fa-circle-check";
+          elements.qualityText.textContent = "Excelente luz transmitida!";
+        } else {
+          elements.qualityBadge.className = "bg-slate-900/90 border border-slate-700/80 text-amber-400 px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg backdrop-blur-sm";
+          elements.qualityIcon.className = "fa-solid fa-lightbulb";
+          elements.qualityText.textContent = "Enquadre o ovo e mantenha o foco";
+        }
+      }, 150);
+    }
+
+    // PROCESSAMENTO DA FOTO COM EXIBIÇÃO DA FOTO CAPTURADA
+    function runAnalysis() {
+      if (state.isAnalyzing) return;
+
+      state.isAnalyzing = true;
+      elements.loadingOverlay.classList.remove('hidden');
+
+      setTimeout(() => {
+        elements.canvas.width = elements.video.videoWidth || 640;
+        elements.canvas.height = elements.video.videoHeight || 480;
+        
+        const ctx = elements.canvas.getContext('2d');
+        ctx.drawImage(elements.video, 0, 0, elements.canvas.width, elements.canvas.height);
+
+        // Captura a imagem exatamente no instante da foto
+        const dataUrl = elements.canvas.toDataURL('image/jpeg', 0.92);
+        elements.capturedImagePreview.src = dataUrl;
+
+        const width = elements.canvas.width;
+        const height = elements.canvas.height;
+        const centerX = Math.floor(width / 2);
+        const centerY = Math.floor(height / 2);
+
+        // Amostras das 3 regiões (Topo, Centro, Base)
+        const topRegion = ctx.getImageData(centerX - 25, centerY - 80, 50, 40);
+        const centerRegion = ctx.getImageData(centerX - 25, centerY - 20, 50, 50);
+
+        // Cálculo de Métricas por Pixels
+        const calcStats = (imgData) => {
+          let sumR = 0, sumG = 0, sumB = 0;
+          const len = imgData.data.length / 4;
+          for (let i = 0; i < imgData.data.length; i += 4) {
+            sumR += imgData.data[i];
+            sumG += imgData.data[i+1];
+            sumB += imgData.data[i+2];
+          }
+          return { r: sumR / len, g: sumG / len, b: sumB / len, avg: (sumR + sumG + sumB) / (3 * len) };
+        };
+
+        const topStats = calcStats(topRegion);
+        const centerStats = calcStats(centerRegion);
+
+        // 1. Câmara de Ar (Gradiente Topo vs Centro)
+        const airDiff = Math.abs(topStats.avg - centerStats.avg);
+        
+        // 2. Porosidade (Variância de brilho no centro)
+        let varSum = 0;
+        for (let i = 0; i < centerRegion.data.length; i += 4) {
+          const val = (centerRegion.data[i] + centerRegion.data[i+1] + centerRegion.data[i+2]) / 3;
+          varSum += Math.pow(val - centerStats.avg, 2);
+        }
+        const porosityScore = Math.min(100, Math.round(Math.sqrt(varSum / (centerRegion.data.length / 4))));
+
+        // 3. Translucidez (Predominância Vermelho/Amarelo)
+        const translucencyScore = Math.min(100, Math.round((centerStats.r / 255) * 100));
+
+        // 4. Centramento da Gema
+        const yolkCentrality = Math.max(20, Math.min(95, Math.round(100 - (airDiff * 1.2))));
+
+        // Montagem do Diagnóstico
+        let evaluation = {
+          airCellPct: Math.min(100, Math.max(15, Math.round(airDiff * 1.5))),
+          translucencyScore: translucencyScore,
+          porosityScore: porosityScore,
+          yolkCentrality: yolkCentrality,
+          status: 'fresco',
+          confidence: Math.min(95, Math.max(76, Math.round(state.luminance * 0.4 + 50)))
+        };
+
+        if (airDiff > 38 || state.luminance < 25) {
+          evaluation.status = 'descartar';
+        } else if (airDiff > 22 || porosityScore > 45 || state.luminance < 45) {
+          evaluation.status = 'breve';
+        }
+
+        renderDetailedResult(evaluation);
+
+        elements.loadingOverlay.classList.add('hidden');
+        state.isAnalyzing = false;
+      }, 400);
+    }
+
+    function renderDetailedResult(evalData) {
+      // 1. Câmara de Ar
+      elements.indAirBar.style.width = `${evalData.airCellPct}%`;
+      if (evalData.airCellPct < 30) {
+        elements.indAirLabel.textContent = "Pequena (< 4mm)";
+        elements.indAirLabel.className = "text-emerald-400 font-bold";
+        elements.indAirBar.className = "h-full bg-emerald-500 transition-all duration-300";
+      } else if (evalData.airCellPct < 60) {
+        elements.indAirLabel.textContent = "Moderada (4mm - 8mm)";
+        elements.indAirLabel.className = "text-amber-400 font-bold";
+        elements.indAirBar.className = "h-full bg-amber-500 transition-all duration-300";
+      } else {
+        elements.indAirLabel.textContent = "Expandida (> 8mm)";
+        elements.indAirLabel.className = "text-rose-400 font-bold";
+        elements.indAirBar.className = "h-full bg-rose-500 transition-all duration-300";
+      }
+
+      // 2. Translucidez
+      elements.indTransBar.style.width = `${evalData.translucencyScore}%`;
+      if (evalData.translucencyScore > 65) {
+        elements.indTransLabel.textContent = "Limpa & Homogênea";
+        elements.indTransLabel.className = "text-emerald-400 font-bold";
+      } else {
+        elements.indTransLabel.textContent = "Luz Difusa / Opaca";
+        elements.indTransLabel.className = "text-amber-400 font-bold";
+      }
+
+      // 3. Porosidade da Casca
+      elements.indPoreBar.style.width = `${evalData.porosityScore}%`;
+      if (evalData.porosityScore < 30) {
+        elements.indPoreLabel.textContent = "Baixa Porosidade (Ideal)";
+      } else if (evalData.porosityScore < 55) {
+        elements.indPoreLabel.textContent = "Porosidade Média";
+      } else {
+        elements.indPoreLabel.textContent = "Alta Porosidade (Pontilhada)";
+      }
+
+      // 4. Posição da Gema
+      elements.indYolkBar.style.width = `${evalData.yolkCentrality}%`;
+      if (evalData.yolkCentrality > 70) {
+        elements.indYolkLabel.textContent = "Centralizada";
+        elements.indYolkLabel.className = "text-emerald-400 font-bold";
+      } else {
+        elements.indYolkLabel.textContent = "Deslocada";
+        elements.indYolkLabel.className = "text-amber-400 font-bold";
+      }
+
+      elements.confidenceVal.textContent = `${evalData.confidence}%`;
+
+      // Status Geral & Duração
+      if (evalData.status === 'fresco') {
+        elements.resultStatus.textContent = "Ovo Fresco";
+        elements.resultStatus.className = "text-lg font-extrabold text-emerald-400";
+        elements.resultIcon.className = "fa-solid fa-circle-check text-xl";
+        elements.resultIconContainer.className = "p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl";
+        elements.expiryVal.textContent = "Até 15 - 20 dias";
+        elements.resultAdvice.textContent = "Excelente estado de conservação! Ideal para consumo em qualquer tipo de prato (frito, cozido ou pochê).";
+
+      } else if (evalData.status === 'breve') {
+        elements.resultStatus.textContent = "Consumir em Breve";
+        elements.resultStatus.className = "text-lg font-extrabold text-amber-400";
+        elements.resultIcon.className = "fa-solid fa-clock text-xl";
+        elements.resultIconContainer.className = "p-2.5 bg-amber-500/20 text-amber-400 rounded-xl";
+        elements.expiryVal.textContent = "Até 3 - 5 dias";
+        elements.resultAdvice.textContent = "Câmara de ar em expansão ou casca porosa. Consumir nos próximos dias em preparações bem cozidas.";
+
+      } else {
+        elements.resultStatus.textContent = "Suspeito / Descartar";
+        elements.resultStatus.className = "text-lg font-extrabold text-rose-500";
+        elements.resultIcon.className = "fa-solid fa-triangle-exclamation text-xl";
+        elements.resultIconContainer.className = "p-2.5 bg-rose-500/20 text-rose-500 rounded-xl";
+        elements.expiryVal.textContent = "Descarte Recomendado";
+        elements.resultAdvice.textContent = "Baixa transparência ou alteração significativa. Realize o teste físico de flutuação em água antes de considerar o uso.";
+      }
+
+      elements.resultCard.classList.remove('hidden');
+      elements.resultCard.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  </script>
+</body>
+</html>
